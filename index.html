@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pan Video Maker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#6c4cf1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f5f5f3;--card:#fff;--text:#1c1c1a;--muted:#6b6b66;--line:#e0e0da;--accent:#6c4cf1;--accent-t:#fff;--stage:#000}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121211;--card:#1c1c1a;--text:#f1f1ee;--muted:#9a9a93;--line:#333330;--accent:#8b72ff}}
+:root[data-theme="dark"]{--bg:#121211;--card:#1c1c1a;--text:#f1f1ee;--muted:#9a9a93;--line:#333330;--accent:#8b72ff}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.4}
+main{max-width:980px;margin:0 auto;padding:16px 14px 48px}
+h1{font-size:1.4rem;margin:0 0 2px}
+.sub{color:var(--muted);margin:0 0 14px;font-size:.92rem}
+#stageWrap{border-radius:12px;overflow:hidden;background:var(--stage);border:1px solid var(--line)}
+canvas{display:block;width:100%;height:auto;aspect-ratio:16/9}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-top:12px}
+.transport{display:flex;align-items:center;gap:10px;margin-top:10px}
+.transport input[type=range]{flex:1}
+#time{font-variant-numeric:tabular-nums;font-size:.85rem;color:var(--muted);min-width:92px;text-align:right}
+button{font:inherit;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;background:var(--accent);color:var(--accent-t);font-weight:600}
+button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+button.sm{padding:5px 9px;font-size:.8rem}
+button:disabled{opacity:.45;cursor:not-allowed}
+input[type=range]{accent-color:var(--accent);width:100%}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.grid label{display:flex;flex-direction:column;gap:4px;font-size:.85rem;color:var(--muted)}
+.grid b{color:var(--text);font-weight:600}
+select,input[type=color]{padding:4px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);height:34px}
+#drop{position:relative;border:2px dashed var(--line);border-radius:12px;padding:20px 12px;text-align:center}
+#drop.over{border-color:var(--accent)}
+#drop b{display:block}
+#drop span{color:var(--muted);font-size:.88rem}
+#file{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+#list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.it{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:6px}
+.it img{width:110px;height:28px;object-fit:cover;border-radius:6px;background:#888;flex:none}
+.it .n{flex:1;min-width:0;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it .no{color:var(--muted);font-size:.8rem;width:18px;text-align:center}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+#msg{font-size:.85rem;color:var(--muted);margin-top:8px;min-height:1.2em}
+.txt{padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;width:100%}
+.mus{position:relative;display:inline-block}
+#mfile{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+</style>
+</head>
+<body>
+<main>
+  <h1>Pan Video Maker</h1>
+  <p class="sub">Add your wide images. They slide left at a steady, readable pace, and the next one follows right behind. Preview it, then export a video.</p>
+
+  <div id="stageWrap"><canvas id="cv" width="1280" height="720"></canvas></div>
+  <div class="transport">
+    <button id="play">Play</button>
+    <button id="restart" class="ghost">Restart</button>
+    <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Timeline">
+    <span id="time">0:00 / 0:00</span>
+  </div>
+
+  <div class="card">
+    <div id="drop"><b>Tap to add wide images</b><span>Select as many as you want. They play in the order below.</span>
+      <input id="file" type="file" accept="image/*" multiple>
+    </div>
+    <div id="list"></div>
+  </div>
+
+  <div class="card grid">
+    <label>Reading pace: <b id="spv"></b><input id="sp" type="range" min="40" max="500" value="160"><span>Lower = slower, easier to read</span></label>
+    <label>Gap between images: <b id="gpv"></b><input id="gp" type="range" min="0" max="400" value="12"></label>
+    <label>Pause at the start: <b id="h0v"></b><input id="h0" type="range" min="0" max="5" step="0.5" value="1"></label>
+    <label>Pause at the end: <b id="h1v"></b><input id="h1" type="range" min="0" max="5" step="0.5" value="1.5"></label>
+    <label>Video size<select id="res"><option value="1080">1920×1080 (HD)</option><option value="720" selected>1280×720 (lighter, recommended on phones)</option></select></label>
+    <label>Background colour<input id="bgc" type="color" value="#000000"></label>
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:10px"><b>Intro</b><button id="ipre" class="ghost sm">Preview intro</button></div>
+    <div class="grid">
+      <label>Intro length: <b id="ilv"></b><input id="iLen" type="range" min="0" max="8" step="0.5" value="4"><span>0 = no intro</span></label>
+      <label>Animation style<select id="iStyle"><option value="hex">Hexagon pop</option><option value="circle">Circle burst</option><option value="slide">Bold bar slide</option><option value="type">Typewriter</option><option value="min">Minimal fade</option></select></label>
+      <label>Reveal transition<select id="iOut"><option value="bars">Bars slide up</option><option value="circle">Circle opens</option><option value="slide">Slide away</option><option value="fade">Fade out</option></select></label>
+      <label>Title<input id="iTitle" class="txt" value="Let’s begin" maxlength="40"></label>
+      <label>Small text under it (optional)<input id="iSub" class="txt" value="" maxlength="60"></label>
+      <label>Font<select id="iFont"><option value="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">Clean</option><option value="Impact,Haettenschweiler,'Arial Narrow Bold',sans-serif">Bold &amp; tall</option><option value="Georgia,'Times New Roman',serif">Elegant serif</option><option value="ui-monospace,Menlo,Consolas,monospace">Typewriter mono</option><option value="'Comic Sans MS','Chalkboard SE',cursive">Playful</option></select></label>
+      <label>Title size: <b id="isv">100%</b><input id="iSize" type="range" min="50" max="140" value="100"></label>
+      <label>Accent colour<input id="iCol" type="color" value="#3b96ff"></label>
+      <label>Text colour<input id="iTxt" type="color" value="#ffffff"></label>
+      <label>Background colour 1<input id="iBg1" type="color" value="#0b1730"></label>
+      <label>Background colour 2<input id="iBg2" type="color" value="#1b2f5c"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:10px"><b>Outro</b><button id="opre" class="ghost sm">Preview end</button></div>
+    <div class="grid">
+      <label>End animation length: <b id="olv"></b><input id="oLen" type="range" min="0" max="5" step="0.5" value="1.5"><span>Plays after your "pause at the end" — 0 = no end animation</span></label>
+      <label>End transition style<select id="oStyle"><option value="fade">Fade to colour</option><option value="circle">Circle close</option><option value="slide">Slide away</option><option value="bars">Bars close</option></select></label>
+      <label>End colour<input id="oCol" type="color" value="#000000"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row"><div class="mus"><button class="ghost" tabindex="-1">Add music</button><input id="mfile" type="file" accept="audio/*"></div><span id="mname" style="flex:1;font-size:.85rem;color:var(--muted)">No music added</span><button id="mrm" class="ghost sm" disabled>Remove</button></div>
+    <div class="grid" style="margin-top:10px"><label>Volume: <b id="mvv">80%</b><input id="mv" type="range" min="0" max="100" value="80"></label><label style="flex-direction:row;align-items:center;gap:8px"><input id="ml" type="checkbox" checked> Loop if shorter than the video</label></div>
+    <div style="font-size:.8rem;color:var(--muted);margin-top:6px">Fades out over the last 2 seconds. The music is included in the exported video.</div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <label style="flex:1;min-width:220px">Export method<select id="expMethod">
+        <option value="frame" selected>Frame-stepped (recommended)</option>
+        <option value="live">Live auto-capture</option>
+      </select></label>
+    </div>
+    <div style="font-size:.8rem;color:var(--muted);margin-top:4px">Frame-stepped sets each frame exactly and records it directly — no downloads, no dropped frames. Takes roughly the video's real length to export either way.</div>
+    <div class="row" style="margin-top:10px"><button id="exp" disabled>Export video</button><span id="fmt" style="color:var(--muted);font-size:.85rem"></span></div>
+    <div id="msg"></div>
+  </div>
+</main>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const cv=$('cv'),cx=cv.getContext('2d');
+let items=[],uid=0,t=0,dur=0,playing=false,recording=false,last=0;
+let maxX=0,speed=1,gapPx=0,h0=1,h1=1.5,introDur=4,panDur=0,stopAt=null,outroDur=1.5;
+
+function fmt(s){s=Math.max(0,s);return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
+
+function layout(){
+  const W=cv.width,H=cv.height,k=H/1080;
+  gapPx=+$('gp').value*k;speed=+$('sp').value*k;h0=+$('h0').value;h1=+$('h1').value;
+  let x=0;
+  items.forEach(it=>{it.sw=it.w*H/it.h;it.x=x;x+=it.sw+gapPx});
+  const total=items.length?x-gapPx:0;
+  maxX=Math.max(0,total-W);
+  introDur=items.length?+$('iLen').value:0;
+  panDur=h0+maxX/speed+h1;
+  outroDur=items.length?+$('oLen').value:0;
+  dur=items.length?introDur+panDur+outroDur:0;
+  $('ilv').textContent=$('iLen').value+' s';
+  $('olv').textContent=$('oLen').value+' s';
+  if(t>dur)t=dur;
+  $('spv').textContent=$('sp').value+' px/s';
+  $('gpv').textContent=$('gp').value+' px';
+  $('h0v').textContent=h0+' s';$('h1v').textContent=h1+' s';
+  $('exp').disabled=!items.length||recording;
+  $('play').disabled=!items.length;
+  if(!recording){
+    if(dur>45)$('msg').textContent='Heads up: this video is '+fmt(dur)+' long — long exports use more memory and are more likely to crash on a phone. Shortening it or exporting on a computer is safer.';
+    else $('msg').textContent='';
+  }
+}
+function cam(tt){return tt<=h0?0:Math.min(maxX,(tt-h0)*speed)}
+
+function draw(){
+  const W=cv.width,H=cv.height;
+  cx.fillStyle=$('bgc').value;cx.fillRect(0,0,W,H);
+  if(!items.length){
+    cx.fillStyle='#888';cx.font=(H/22)+'px system-ui,sans-serif';cx.textAlign='center';
+    cx.fillText('Add images to start',W/2,H/2);return;
+  }
+  const intro=t<introDur,exitL=Math.min(.9,introDur*.35);
+  if(!intro||t>introDur-exitL){
+    const c=cam(t-introDur);
+    items.forEach(it=>{
+      const x=it.x-c;
+      if(x<W&&x+it.sw>0)cx.drawImage(it.img,x,0,it.sw,H);
+    });
+  }
+  if(intro)drawIntro(W,H);
+  drawOutro(W,H);
+}
+
+function clamp(x){return Math.min(1,Math.max(0,x))}
+function eo(x){x=clamp(x);return 1-Math.pow(1-x,3)}
+function eb(x){x=clamp(x);const c=1.70158,d=c+1;return 1+d*Math.pow(x-1,3)+c*Math.pow(x-1,2)}
+function hexPath(x,y,r){cx.beginPath();for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/2,px=x+r*Math.cos(a),py=y+r*Math.sin(a);i?cx.lineTo(px,py):cx.moveTo(px,py)}cx.closePath()}
+
+function shapeCover(W,H,ex,type,fillStyle){
+  cx.save();cx.fillStyle=fillStyle;
+  if(type==='fade'){cx.globalAlpha=1-ex;cx.fillRect(0,0,W,H)}
+  else if(type==='circle'){
+    const R=Math.hypot(W,H)/2*1.02*eo(ex);
+    cx.beginPath();cx.rect(0,0,W,H);
+    if(R>0){cx.moveTo(W/2+R,H/2);cx.arc(W/2,H/2,R,0,Math.PI*2)}
+    cx.fill('evenodd');
+  }else if(type==='slide'){cx.translate(-W*eo(ex),0);cx.fillRect(0,0,W+1,H)}
+  else{const bars=8,bw=W/bars;for(let i=0;i<bars;i++){const p=clamp((ex-i*.06)/.58);cx.fillRect(i*bw-1,-H*eo(p),bw+2,H)}}
+  cx.restore();
+}
+function drawBg(W,H,ex,type){
+  const g=cx.createLinearGradient(0,0,W,H);
+  g.addColorStop(0,$('iBg1').value);g.addColorStop(1,$('iBg2').value);
+  shapeCover(W,H,ex,type,g);
+}
+function drawOutro(W,H){
+  if(!outroDur)return;
+  const start=dur-outroDur;
+  if(t<start)return;
+  const ex=clamp((t-start)/outroDur);
+  shapeCover(W,H,1-ex,$('oStyle').value,$('oCol').value);
+}
+
+function fit(text,size,maxW,font){
+  cx.font='800 '+size+'px '+font;
+  const w=cx.measureText(text).width;
+  if(w>maxW){size*=maxW/w;cx.font='800 '+size+'px '+font}
+  return size;
+}
+
+function subLine(o,y,start){
+  if(!o.sub)return;
+  const a=eo((t-start)/.6);
+  cx.save();cx.globalAlpha=o.fade*a;cx.font='600 '+(o.H*.042)+'px '+o.font;
+  cx.textAlign='center';cx.fillStyle=o.tc;cx.fillText(o.sub,o.mx,y+(1-a)*o.H*.02);cx.restore();
+}
+
+function introShape(o,circle){
+  const {W,H,mx,my,fade,accent,tc,title,sz,font,ex}=o;
+  for(let k=0;k<3;k++){
+    const q=(t-.15-k*.28)/1.1;
+    if(q>0&&q<1){cx.globalAlpha=(1-q)*.5*fade;cx.strokeStyle=accent;cx.lineWidth=H*.006;cx.beginPath();cx.arc(mx,my,H*.27*(1+q*1.2),0,7);cx.stroke()}
+  }
+  cx.globalAlpha=fade;
+  const r=H*.27*eb(t/.9)*(1+ex*.25);
+  if(circle){
+    const da=fade*eo((t-.5)/.5);cx.fillStyle=accent;
+    for(let i=0;i<12;i++){const an=i*Math.PI/6+t*1.5;cx.globalAlpha=da*(.35+.65*((i%3)/2));cx.beginPath();cx.arc(mx+Math.cos(an)*r*1.3,my+Math.sin(an)*r*1.3,H*.009,0,7);cx.fill()}
+    cx.globalAlpha=fade;
+  }
+  cx.shadowColor=accent;cx.shadowBlur=H*.05;
+  if(circle){cx.beginPath();cx.arc(mx,my,r,0,Math.PI*2)}else hexPath(mx,my,r);
+  cx.fillStyle=accent;cx.fill();
+  cx.shadowBlur=0;cx.lineWidth=H*.008;cx.strokeStyle=tc;cx.stroke();
+  if(title){
+    const s=fit(title,H*.1*sz,r*(circle?1.6:1.5),font);
+    cx.textAlign='left';cx.fillStyle=tc;
+    const ws=[...title].map(ch=>cx.measureText(ch).width),tw=ws.reduce((a,b)=>a+b,0);
+    let x=mx-tw/2;
+    [...title].forEach((ch,i)=>{
+      const q=(t-.6-i*.05)/.4;
+      cx.globalAlpha=fade*eo(q);
+      cx.fillText(ch,x,my+(1-eo(q))*s*.6);
+      x+=ws[i];
+    });
+  }
+  subLine(o,my+r*1.3,1.4);
+}
+
+function introSlide(o){
+  const {W,H,mx,my,fade,accent,tc,title,font,sz}=o;
+  if(title){
+    const s=fit(title,H*.13*sz,W*.8,font),w=cx.measureText(title).width;
+    const pad=s*.5,bh=s*1.5,bw=w+pad*2,bx=mx-bw/2,by=my-bh/2,p=eo(t/.7);
+    cx.globalAlpha=fade;cx.fillStyle=accent;cx.fillRect(bx,by,bw*p,bh);
+    cx.save();cx.beginPath();cx.rect(bx,by,bw*p,bh);cx.clip();
+    cx.textAlign='left';cx.fillStyle=tc;
+    cx.fillText(title,bx+pad-(1-eo((t-.25)/.7))*s,my);
+    cx.restore();
+    subLine(o,my+bh*.5+H*.07,1);
+  }else subLine(o,my,.3);
+}
+
+function introType(o){
+  const {W,H,mx,my,fade,accent,tc,title,font,sz}=o,L=introDur;
+  if(title){
+    const s=fit(title,H*.1*sz,W*.86,font),w=cx.measureText(title).width;
+    const tt=Math.min(1.8,L*.45),n=Math.floor(clamp((t-.4)/tt)*title.length);
+    const shown=title.slice(0,n),x0=mx-w/2;
+    cx.globalAlpha=fade;cx.textAlign='left';cx.fillStyle=tc;cx.fillText(shown,x0,my);
+    const sw=cx.measureText(shown).width;
+    if(t>=.3&&(t<.4+tt||Math.floor(t*2)%2===0)){cx.fillStyle=accent;cx.fillRect(x0+sw+s*.06,my-s*.55,s*.07,s*1.1)}
+    cx.fillStyle=accent;cx.fillRect(x0,my+s*.7,w*eo((t-(.4+tt))/.5),s*.08);
+    subLine(o,my+s*1.35,.6+tt);
+  }else subLine(o,my,.3);
+}
+
+function introMin(o){
+  const {W,H,mx,my,fade,accent,tc,title,font,sz}=o;
+  if(title){
+    const s=fit(title,H*.11*sz,W*.86,font),w=cx.measureText(title).width,a=eo((t-.2)/.9);
+    cx.save();cx.translate(mx,my);cx.scale(.92+.08*a,.92+.08*a);
+    cx.globalAlpha=fade*a;cx.textAlign='center';cx.fillStyle=tc;cx.fillText(title,0,0);cx.restore();
+    const lw=Math.min(w*.6,W*.5)*eo((t-.6)/.8);
+    cx.globalAlpha=fade;cx.fillStyle=accent;cx.fillRect(mx-lw/2,my+s*.8,lw,H*.006);
+    subLine(o,my+s*1.3,1.1);
+  }else subLine(o,my,.3);
+}
+
+function drawIntro(W,H){
+  const L=introDur,X=Math.min(.9,L*.35),ex=clamp((t-(L-X))/X),out=$('iOut').value;
+  drawBg(W,H,ex,out);
+  const fade=Math.max(0,1-ex*1.4);
+  if(fade<=0)return;
+  const o={W,H,ex,fade,mx:W/2,my:H*.46,accent:$('iCol').value,tc:$('iTxt').value,title:$('iTitle').value,sub:$('iSub').value,sz:$('iSize').value/100,font:$('iFont').value};
+  const st=$('iStyle').value;
+  cx.save();
+  if(out==='slide')cx.translate(-W*eo(ex),0);
+  cx.textBaseline='middle';
+  if(st==='hex')introShape(o,false);
+  else if(st==='circle')introShape(o,true);
+  else if(st==='slide')introSlide(o);
+  else if(st==='type')introType(o);
+  else introMin(o);
+  cx.restore();
+}
+
+function ui(){
+  $('scrub').value=dur?Math.round(t/dur*1000):0;
+  $('time').textContent=fmt(t)+' / '+fmt(dur);
+  $('play').textContent=playing?'Pause':(t>=dur&&dur?'Replay':'Play');
+}
+
+function tick(ts){
+  if(playing){
+    t+=(ts-last)/1000;
+    if(!recording&&stopAt!=null&&t>=stopAt){t=stopAt;stopAt=null;setPlay(false)}
+    if(t>=dur){t=dur;setPlay(false);if(recording)finishRec()}
+  }
+  last=ts;draw();ui();requestAnimationFrame(tick);
+}
+
+const MAX_IMG_DIM=2200; // plenty for 1080p output — keeping full 12MP+ phone photos in memory is what crashes the tab
+function addFiles(files){
+  const arr=[...files].filter(f=>f.type.startsWith('image/'));
+  Promise.all(arr.map(f=>new Promise(res=>{
+    const url=URL.createObjectURL(f),img=new Image();
+    img.onload=()=>{
+      let src=img,w=img.naturalWidth,h=img.naturalHeight;
+      if(Math.max(w,h)>MAX_IMG_DIM){
+        const sc=MAX_IMG_DIM/Math.max(w,h);
+        const ow=Math.max(1,Math.round(w*sc)),oh=Math.max(1,Math.round(h*sc));
+        const oc=document.createElement('canvas');oc.width=ow;oc.height=oh;
+        oc.getContext('2d').drawImage(img,0,0,ow,oh);
+        src=oc;w=ow;h=oh;
+      }
+      res({id:++uid,name:f.name,img:src,url,w,h});
+    };
+    img.onerror=()=>res(null);img.src=url;
+  }))).then(r=>{
+    r.filter(Boolean).forEach(o=>items.push(o));
+    renderList();layout();t=0;draw();ui();
+    $('msg').textContent='';
+  });
+}
+
+function renderList(){
+  const L=$('list');L.innerHTML='';
+  items.forEach((it,i)=>{
+    const d=document.createElement('div');d.className='it';
+    d.innerHTML='<span class="no"></span><img alt=""><span class="n"></span><button class="ghost sm up">↑</button><button class="ghost sm dn">↓</button><button class="ghost sm rm">✕</button>';
+    d.querySelector('.no').textContent=i+1;
+    d.querySelector('img').src=it.url;
+    d.querySelector('.n').textContent=it.name;
+    d.querySelector('.up').disabled=i===0;
+    d.querySelector('.dn').disabled=i===items.length-1;
+    d.querySelector('.up').onclick=()=>mv(i,-1);
+    d.querySelector('.dn').onclick=()=>mv(i,1);
+    d.querySelector('.rm').onclick=()=>{URL.revokeObjectURL(it.url);items.splice(i,1);renderList();layout();t=0;setPlay(false)};
+    L.appendChild(d);
+  });
+}
+function mv(i,d){const j=i+d;if(j<0||j>=items.length)return;[items[i],items[j]]=[items[j],items[i]];renderList();layout();t=0}
+
+/* ---- frame-stepped export (reliable, no external dependencies) ----
+   Instead of letting the canvas auto-sample frames in real time (which can
+   skip or stall if the tab is busy), we set t to the exact value for each
+   frame ourselves, draw it, and push that exact frame into the recorder
+   with track.requestFrame(). Nothing here depends on an external library,
+   a worker, or a download — only standard browser APIs. */
+async function startSteppedExport(){
+  if(!items.length||recording)return;
+  mime=pickMime();
+  if(!mime||!cv.captureStream){$('msg').textContent='This browser can’t record video. Try Chrome on a computer or Android.';return}
+  if(!(window.MediaStreamTrack&&MediaStreamTrack.prototype.requestFrame)){
+    // Fallback for browsers without manual frame stepping support
+    startRec();return;
+  }
+  ext=mime.indexOf('mp4')>-1?'mp4':'webm';
+  chunks=[];recording=true;stopAt=null;setPlay(false);
+  $('exp').disabled=true;$('play').disabled=true;
+  layout();
+  const fps=30;
+  t=0;draw();
+  const stream=cv.captureStream(0);
+  const track=stream.getVideoTracks()[0];
+  if(music){ensureCtx();ctx.resume();stream.addTrack(dest.stream.getAudioTracks()[0])}
+  rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:8000000});
+  rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
+  const stopped=new Promise(resolve=>{
+    rec.onstop=async()=>{
+      const blob=new Blob(chunks,{type:mime.split(';')[0]});
+      $('msg').textContent='Done. Saving your video…';
+      await save('pan-video.'+ext,blob);
+      resolve();
+    };
+  });
+  try{
+    rec.start();
+    if(music)startAudio();
+    const totalFrames=Math.max(1,Math.round(dur*fps)),frameMs=1000/fps;
+    for(let i=0;i<totalFrames;i++){
+      t=Math.min(dur,i/fps);
+      draw();ui();
+      track.requestFrame();
+      $('msg').textContent='Recording… '+fmt(t)+' / '+fmt(dur)+' — keep this tab open and visible.';
+      await new Promise(r=>setTimeout(r,frameMs));
+    }
+    t=dur;draw();ui();track.requestFrame();
+    stopAudio();
+    rec.stop();
+    await stopped;
+  }catch(err){
+    console.error(err);
+    $('msg').textContent='Export failed: '+(err&&err.message?err.message:err);
+    try{if(rec&&rec.state!=='inactive')rec.stop()}catch(e){}
+  }finally{
+    recording=false;t=0;layout();draw();ui();
+    $('exp').disabled=!items.length;$('play').disabled=!items.length;
+  }
+}
+
+/* ---- export ---- */
+let rec,chunks,mime,ext;
+function pickMime(){
+  const c=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4;codecs=avc1','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  for(const m of c){if(window.MediaRecorder&&MediaRecorder.isTypeSupported(m))return m}
+  return '';
+}
+function startRec(){
+  mime=pickMime();
+  if(!mime||!cv.captureStream){$('msg').textContent='This browser can’t record video. Try Chrome on a computer or Android.';return}
+  ext=mime.indexOf('mp4')>-1?'mp4':'webm';
+  chunks=[];recording=true;stopAt=null;setPlay(false);t=0;layout();draw();
+  const stream=cv.captureStream(30);
+  if(music){ensureCtx();ctx.resume();stream.addTrack(dest.stream.getAudioTracks()[0])}
+  rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:8000000});
+  rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
+  rec.onstop=async()=>{
+    const blob=new Blob(chunks,{type:mime.split(';')[0]});
+    recording=false;layout();
+    $('msg').textContent='Done. Saving your video…';
+    await save('pan-video.'+ext,blob);
+  };
+  rec.start(500);
+  $('msg').textContent='Recording in real time — keep this tab open and visible until it finishes ('+fmt(dur)+').';
+  $('exp').disabled=true;$('play').disabled=true;
+  setTimeout(()=>{setPlay(true)},300);
+}
+function finishRec(){setTimeout(()=>{if(rec&&rec.state!=='inactive')rec.stop()},400)}
+
+async function save(filename,data){
+  let dl=null;
+  try{dl=await claude.use('downloads')}catch(e){}
+  if(!dl){
+    const u=URL.createObjectURL(data),a=document.createElement('a');
+    a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(u),4000);
+    $('msg').textContent='Saved as '+filename;return;
+  }
+  try{await dl.save({filename,data});$('msg').textContent='Saved as '+filename}
+  catch(e){if(e&&e.code!=='declined')$('msg').textContent='Could not save: '+(e.message||e.code);else $('msg').textContent=''}
+}
+
+/* ---- music ---- */
+let ctx,dest,gain,music=null,srcNode=null;
+function ensureCtx(){
+  if(ctx)return;
+  ctx=new(window.AudioContext||window.webkitAudioContext)();
+  dest=ctx.createMediaStreamDestination();gain=ctx.createGain();
+  gain.connect(ctx.destination);gain.connect(dest);
+}
+async function loadMusic(f){
+  ensureCtx();$('mname').textContent='Loading…';
+  try{
+    const buf=await ctx.decodeAudioData(await f.arrayBuffer());
+    music={name:f.name,buf};$('mname').textContent=f.name+' ('+fmt(buf.duration)+')';
+  }catch(e){music=null;$('mname').textContent='Could not read that audio file'}
+  $('mrm').disabled=!music;
+}
+function stopAudio(){if(srcNode){try{srcNode.stop()}catch(e){}srcNode=null}}
+function startAudio(){
+  stopAudio();if(!music||!ctx)return;
+  ctx.resume();
+  const vol=+$('mv').value/100,rem=Math.max(.05,dur-t),now=ctx.currentTime,gp=gain.gain;
+  const s=ctx.createBufferSource();s.buffer=music.buf;s.loop=$('ml').checked;
+  const off=s.loop?t%music.buf.duration:t;
+  if(off>=music.buf.duration)return;
+  gp.cancelScheduledValues(now);
+  if(t<.05){gp.setValueAtTime(0,now);gp.linearRampToValueAtTime(vol,now+.6)}
+  else gp.setValueAtTime(rem<2?vol*rem/2:vol,now);
+  if(rem>2)gp.setValueAtTime(vol,now+rem-2);
+  gp.linearRampToValueAtTime(0,now+rem);
+  s.connect(gain);s.start(0,off);srcNode=s;
+}
+function setPlay(v){playing=v;if(v)startAudio();else stopAudio()}
+
+/* ---- events ---- */
+$('file').onchange=e=>{addFiles(e.target.files);e.target.value=''};
+['dragenter','dragover'].forEach(n=>$('drop').addEventListener(n,e=>{e.preventDefault();$('drop').classList.add('over')}));
+['dragleave','drop'].forEach(n=>$('drop').addEventListener(n,e=>{e.preventDefault();$('drop').classList.remove('over')}));
+$('drop').addEventListener('drop',e=>addFiles(e.dataTransfer.files));
+$('play').onclick=()=>{if(recording)return;stopAt=null;if(t>=dur)t=0;if(music){ensureCtx();ctx.resume()}setPlay(!playing)};
+$('restart').onclick=()=>{if(recording)return;stopAt=null;t=0;setPlay(false)};
+$('scrub').oninput=e=>{if(recording)return;stopAt=null;setPlay(false);t=dur*e.target.value/1000};
+['sp','gp','h0','h1','iLen','oLen'].forEach(id=>$(id).oninput=()=>{if(!recording)layout()});
+$('mfile').onchange=e=>{if(e.target.files[0])loadMusic(e.target.files[0]);e.target.value=''};
+$('mrm').onclick=()=>{if(recording)return;stopAudio();music=null;$('mname').textContent='No music added';$('mrm').disabled=true;if(playing)startAudio()};
+$('mv').oninput=e=>{$('mvv').textContent=e.target.value+'%';if(playing)startAudio()};
+$('iSize').oninput=e=>{$('isv').textContent=e.target.value+'%'};
+$('ipre').onclick=()=>{if(recording||!items.length)return;if(music){ensureCtx();ctx.resume()}t=0;stopAt=Math.min(dur,introDur+1.2);setPlay(true)};
+$('opre').onclick=()=>{if(recording||!items.length)return;if(music){ensureCtx();ctx.resume()}stopAt=null;t=Math.max(0,dur-outroDur-1);setPlay(true)};
+$('ml').onchange=()=>{if(playing)startAudio()};
+$('bgc').oninput=()=>{};
+$('res').onchange=e=>{if(recording)return;const H=+e.target.value;cv.height=H;cv.width=Math.round(H*16/9);layout()};
+$('exp').onclick=()=>{if($('expMethod').value==='live')startRec();else startSteppedExport()};
+function updateFmtMsg(){
+  if($('expMethod').value==='live'&&!window.MediaRecorder)$('fmt').textContent='Live recording isn’t supported in this browser — use Frame-by-frame instead.';
+  else $('fmt').textContent='';
+}
+$('expMethod').onchange=updateFmtMsg;
+updateFmtMsg();
+
+layout();requestAnimationFrame(tick);
+})();
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>

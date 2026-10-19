@@ -1,0 +1,16 @@
+{
+  "id": "./",
+  "name": "Pan Video Maker",
+  "short_name": "Pan Maker",
+  "description": "Create smooth panning videos from images with intro, outro, and music.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#121211",
+  "theme_color": "#6c4cf1",
+  "icons": [
+    {"src":"icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}
